@@ -206,13 +206,20 @@ public class GHUtility {
     public static void buildRandomGraph(Graph graph, Random random, int numNodes, double meanDegree, boolean allowLoops,
                                         boolean allowZeroDistance, BooleanEncodedValue accessEnc, DecimalEncodedValue speedEnc, Double speed,
                                         double pNonZeroLoop, double pBothDir, double pRandomDistanceOffset) {
+        buildRandomGraph(graph, random, numNodes, meanDegree, allowLoops, allowZeroDistance, accessEnc, speedEnc, null, speed, pNonZeroLoop, pBothDir, pRandomDistanceOffset);
+    }
+
+    public static void buildRandomGraph(Graph graph, Random random, int numNodes, double meanDegree, boolean allowLoops,
+                                        boolean allowZeroDistance, BooleanEncodedValue accessEnc, DecimalEncodedValue speedEnc, DecimalEncodedValue priorityEnc, Double speed,
+                                        double pNonZeroLoop, double pBothDir, double pRandomDistanceOffset) {
         if (numNodes < 2 || meanDegree < 1) {
             throw new IllegalArgumentException("numNodes must be >= 2, meanDegree >= 1");
         }
         for (int i = 0; i < numNodes; ++i) {
             double lat = 49.4 + (random.nextDouble() * 0.01);
             double lon = 9.7 + (random.nextDouble() * 0.01);
-            graph.getNodeAccess().setNode(i, lat, lon);
+            double ele = 50 + random.nextDouble() * 200;
+            graph.getNodeAccess().setNode(i, lat, lon, ele);
         }
         double minDist = Double.MAX_VALUE;
         double maxDist = Double.MIN_VALUE;
@@ -241,8 +248,8 @@ public class GHUtility {
             boolean bothDirections = random.nextDouble() < pBothDir;
             EdgeIteratorState edge = graph.edge(from, to).setDistance(distance).set(accessEnc, true);
             if (bothDirections) edge.setReverse(accessEnc, true);
-            double fwdSpeed = 10 + random.nextDouble() * 110;
-            double bwdSpeed = 10 + random.nextDouble() * 110;
+            double fwdSpeed = 5 + random.nextDouble() * 10;
+            double bwdSpeed = 5 + random.nextDouble() * 10;
             // if an explicit speed is given we discard the random speeds and use the given one instead
             if (speed != null) {
                 fwdSpeed = bwdSpeed = speed;
@@ -252,6 +259,8 @@ public class GHUtility {
                 if (speedEnc.isStoreTwoDirections())
                     edge.setReverse(speedEnc, bwdSpeed);
             }
+
+            edge.set(priorityEnc, 0.6 + random.nextDouble() * 0.2);
             numEdges++;
         }
         LOGGER.debug(String.format(Locale.ROOT, "Finished building random graph" +

@@ -23,20 +23,26 @@ import com.graphhopper.config.LMProfile;
 import com.graphhopper.config.Profile;
 import com.graphhopper.gpx.GpxConversions;
 import com.graphhopper.jackson.Gpx;
-import com.graphhopper.matching.EdgeMatch;
-import com.graphhopper.matching.MapMatching;
-import com.graphhopper.matching.MatchResult;
-import com.graphhopper.matching.State;
+import com.graphhopper.matching.*;
+import com.graphhopper.routing.util.EncodingManager;
+import com.graphhopper.routing.util.FlagEncoder;
 import com.graphhopper.storage.index.Snap;
+import com.graphhopper.util.GHUtility;
 import com.graphhopper.util.Helper;
 import com.graphhopper.util.PMap;
+import com.graphhopper.util.shapes.BBox;
+import com.graphhopper.util.shapes.GHPoint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
 import static com.graphhopper.application.MapMatchingTest.fetchStreets;
 import static org.junit.jupiter.api.Assertions.*;
@@ -122,6 +128,36 @@ public class MapMatching2Test {
         }
 
         assertEquals(0, mr.getMatchMillis(), 50);
+    }
+
+    @RepeatedTest(1000)
+    public void weird_bug() {
+        long seed = System.nanoTime();
+        Random rnd = new Random(seed);
+        GraphHopper hopper = new GraphHopper() {
+            @Override
+            protected void importOSM() {
+                getGraphHopperStorage().create(2000);
+                FlagEncoder encoder = getEncodingManager().fetchEdgeEncoders().get(0);
+                GHUtility.buildRandomGraph(getGraphHopperStorage(), rnd, 50, 2.2, true, true, encoder.getAccessEnc(), encoder.getAverageSpeedEnc(),
+                        encoder.getDecimalEncodedValue(EncodingManager.getKey("bike2", "priority")), null, 0, 0.7, 0);
+            }
+        };
+        hopper.setGraphHopperLocation(GH_LOCATION);
+        hopper.setFlagEncodersString("bike2");
+        hopper.setProfiles(new Profile("my_profile").setVehicle("bike2").setWeighting("fastest"));
+        hopper.getLMPreparationHandler().setLMProfiles(new LMProfile("my_profile"));
+        hopper.importOrLoad();
+        MapMatching mapMatching = new MapMatching(hopper, new PMap().putObject("profile", "my_profile"));
+        List<Observation> observations = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            BBox bbox = hopper.getGraphHopperStorage().getBounds();
+            double lat = rnd.nextDouble() * (bbox.maxLat - bbox.minLat) + bbox.minLat;
+            double lon = rnd.nextDouble() * (bbox.maxLon - bbox.minLon) + bbox.minLon;
+            observations.add(new Observation(new GHPoint(lat, lon)));
+        }
+        MatchResult match = mapMatching.match(observations);
+        assertTrue(match.getMatchLength() > 0);
     }
 
     private void validateEdgeMatch(EdgeMatch edgeMatch) {
